@@ -192,6 +192,13 @@ void detect_motion() {
         else
             dynamic[loop] = 0;//else its static
     */
+   for (int loop=0; loop<nb_beams; loop++ ){
+        if( fabs( background[loop] - range[loop] ) > detection_threshold){
+            dynamic[loop] = 1;//the current hit is dynamic
+        } else{
+            dynamic[loop] = 0;//else its static
+        }
+    }
     ROS_INFO("motion detected");
 
 }//detect_motion
@@ -225,6 +232,73 @@ void perform_clustering() {
     colors[nb_pts].a = 1.0;
     nb_pts++;
 
+    int loop;
+    for( loop=1; loop<nb_beams; loop++ ){
+        if(fabs(background[loop] - range[loop]) < cluster_threshold){
+            cluster[loop] = nb_cluster;
+            if(dynamic[loop] == 1){
+                ++nb_dynamic;
+            }
+        } else {
+            cluster_end[nb_cluster] = loop;
+            cluster_dynamic[nb_cluster] = ( nb_dynamic/fabs(cluster_start[nb_cluster] - cluster_end[nb_cluster])) * 100; 
+            cluster_size[nb_cluster] = distancePoints(current_scan[cluster_start[nb_cluster]], current_scan[cluster_end[nb_cluster]]);
+            cluster_middle[nb_cluster] = midPoint(current_scan[cluster_start[nb_cluster]], current_scan[cluster_end[nb_cluster]]);
+            
+            //graphical display of the end of the current cluster in red
+            display[nb_pts].x = current_scan[cluster_end[nb_cluster]].x;
+            display[nb_pts].y = current_scan[cluster_end[nb_cluster]].y;
+            display[nb_pts].z = current_scan[cluster_end[nb_cluster]].z;
+
+            colors[nb_pts].r = 1;
+            colors[nb_pts].g = 0;
+            colors[nb_pts].b = 0;
+            colors[nb_pts].a = 1.0;
+            nb_pts++;
+
+            //textual display
+            ROS_INFO("cluster[%i]: [%i](%f, %f) -> [%i](%f, %f), size: %f, dynamic: %i", nb_cluster, cluster_start[nb_cluster], current_scan[cluster_start[nb_cluster]].x, current_scan[cluster_start[nb_cluster]].y, cluster_end[nb_cluster], current_scan[cluster_end[nb_cluster]].x, current_scan[cluster_end[nb_cluster]].y, cluster_size[nb_cluster], cluster_dynamic[nb_cluster]);
+
+            // 2/ we start a new cluster with the current hit
+            nb_dynamic = 0;// to count the number of hits of the current cluster that are dynamic
+            nb_cluster++;
+            cluster_start[nb_cluster] = loop;
+            cluster[loop] = nb_cluster;
+            if ( dynamic[loop] ){
+                nb_dynamic++;
+            }
+
+            //graphical display of the start of the current cluster in green
+            display[nb_pts].x = current_scan[cluster_start[nb_cluster]].x;
+            display[nb_pts].y = current_scan[cluster_start[nb_cluster]].y;
+            display[nb_pts].z = current_scan[cluster_start[nb_cluster]].z;
+
+            colors[nb_pts].r = 0;
+            colors[nb_pts].g = 1;
+            colors[nb_pts].b = 0;
+            colors[nb_pts].a = 1.0;
+            nb_pts++;        
+        }
+    }
+    cluster_end[nb_cluster] = loop;
+    cluster_dynamic[nb_cluster] = ( nb_dynamic/fabs(cluster_start[nb_cluster] - cluster_end[nb_cluster])) * 100; 
+    cluster_size[nb_cluster] = distancePoints(current_scan[cluster_start[nb_cluster]], current_scan[cluster_end[nb_cluster]]);
+    cluster_middle[nb_cluster] = midPoint(current_scan[cluster_start[nb_cluster]], current_scan[cluster_end[nb_cluster]]);
+
+    //graphical display of the end of the current cluster in red
+    display[nb_pts].x = current_scan[cluster_end[nb_cluster]].x;
+    display[nb_pts].y = current_scan[cluster_end[nb_cluster]].y;
+    display[nb_pts].z = current_scan[cluster_end[nb_cluster]].z;
+
+    colors[nb_pts].r = 1;
+    colors[nb_pts].g = 0;
+    colors[nb_pts].b = 0;
+    colors[nb_pts].a = 1.0;
+    nb_pts++;
+
+    //textual display
+    ROS_INFO("cluster[%i]: [%i](%f, %f) -> [%i](%f, %f), size: %f, dynamic: %i", nb_cluster, cluster_start[nb_cluster], current_scan[cluster_start[nb_cluster]].x, current_scan[cluster_start[nb_cluster]].y, cluster_end[nb_cluster], current_scan[cluster_end[nb_cluster]].x, current_scan[cluster_end[nb_cluster]].y, cluster_size[nb_cluster], cluster_dynamic[nb_cluster]);
+    
     /*for( int loop=1; loop<nb_beams; loop++ )//loop over all the hits
         if DISTANCE between (the previous hit and the current one) is lower than "cluster_threshold"
         then //the current hit belongs to the current cluster
@@ -291,6 +365,29 @@ void detect_moving_legs() {
     ROS_INFO("detecting moving legs");
     nb_moving_legs_detected = 0;
 
+    for (int loop=0; loop<nb_cluster; loop++){
+        if((cluster_size[loop] > leg_size_min) && (cluster_size[loop] < leg_size_max) && (cluster_dynamic[loop] > dynamic_threshold)){
+            moving_leg_detected[nb_moving_legs_detected] = cluster_middle[loop];
+            ++nb_moving_legs_detected;
+        }
+        //textual display
+        ROS_INFO("moving leg detected[%i]: cluster[%i]", nb_moving_legs_detected, loop);
+
+        //graphical display
+        for(int loop2=cluster_start[loop]; loop2<=cluster_end[loop]; loop2++) {
+            // moving legs are white
+            display[nb_pts].x = current_scan[loop2].x;
+            display[nb_pts].y = current_scan[loop2].y;
+            display[nb_pts].z = current_scan[loop2].z;
+
+            colors[nb_pts].r = 1;
+            colors[nb_pts].g = 1;
+            colors[nb_pts].b = 1;
+            colors[nb_pts].a = 1.0;
+
+            nb_pts++;
+        }
+    }
     /*for (int loop=0; loop<nb_cluster; loop++)//loop over all the clusters
         if the size of the current cluster is higher than "leg_size_min" and lower than "leg_size_max" and it has "dynamic_threshold"% of its hits that are dynamic
         then the current cluster is a moving leg
@@ -327,7 +424,36 @@ void detect_moving_persons() {
 
     ROS_INFO("detecting moving persons");
     nb_moving_persons_detected = 0;
+    for (int loop_leg1=0; loop_leg1<nb_moving_legs_detected; loop_leg1++){
+        int loop_leg2;
+        for (loop_leg2=loop_leg1+1; loop_leg2<nb_moving_legs_detected; loop_leg2++){
+            if(distancePoints(moving_leg_detected[loop_leg1], moving_leg_detected[loop_leg2]) < legs_distance_max){
+                moving_persons_detected[nb_moving_persons_detected] = midPoint(moving_leg_detected[loop_leg1], moving_leg_detected[loop_leg2]);
+                // textual display
+                ROS_INFO("moving person detected[%i]: leg[%i]+leg[%i] -> (%f, %f)", nb_moving_persons_detected, loop_leg1, loop_leg2, moving_persons_detected[nb_moving_persons_detected].x, moving_persons_detected[nb_moving_persons_detected].y);
 
+                // the moving persons are green
+                display[nb_pts].x = moving_persons_detected[nb_moving_persons_detected].x;
+                display[nb_pts].y = moving_persons_detected[nb_moving_persons_detected].y;
+                display[nb_pts].z = moving_persons_detected[nb_moving_persons_detected].z;
+
+                colors[nb_pts].r = 1;
+                colors[nb_pts].g = 1;
+                colors[nb_pts].b = 0;
+                colors[nb_pts].a = 1.0;
+
+                nb_pts++;
+
+                //update of the goal and publish of the goal
+                goal_to_reach.x = moving_persons_detected[nb_moving_persons_detected].x;
+                goal_to_reach.y = moving_persons_detected[nb_moving_persons_detected].y;
+                break; // we care only about the 1st person detected
+            }
+        }
+        if(loop_leg2 != nb_moving_legs_detected){
+            break; // 1st person detected
+        }
+    }
     /*for (int loop_leg1=0; loop_leg1<nb_moving_legs_detected; loop_leg1++)//loop over all the legs
         for (int loop_leg2=loop_leg1+1; loop_leg2<nb_moving_legs_detected; loop_leg2++)//loop over all the legs
             if the distance between two moving legs is lower than "legs_distance_max"
@@ -406,6 +532,13 @@ float distancePoints(geometry_msgs::Point pa, geometry_msgs::Point pb) {
 
     return sqrt(pow((pa.x-pb.x),2.0) + pow((pa.y-pb.y),2.0));
 
+}
+
+geometry_msgs::Point midPoint(geometry_msgs::Point pa, geometry_msgs::Point pb) {
+    geometry_msgs::Point p;
+    p.x = (pa.x+pb.x)/2;
+    p.y = (pa.y+pb.y)/2;
+    return p;
 }
 
 // Draw the field of view and other references

@@ -130,13 +130,17 @@ void update() {
             //rotation_speed = kp*error + ki * error + kp * error_derivation;
 
             float error_derivation;//To complete
+            error_derivation = error - error_previous;
             //ROS_INFO("error_derivaion: %f", error_derivation);
 
+            error_integral += error;
             //error_integral = ...;//To complete
             //ROS_INFO("error_integral: %f", error_integral);
 
             //control of translation with a PID controller
+            // CSK: ki, kd are currently zero, need to figure appropriate values if necessary
             translation_speed = kp * error + ki * error_integral + kd * error_derivation;
+            error_previous = error;
             ROS_INFO("(translation_node) translation_done: %f, translation_to_do: %f -> translation_speed: %f", translation_done, translation_to_do, translation_speed);
         }
         else {
