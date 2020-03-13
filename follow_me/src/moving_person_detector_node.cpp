@@ -234,14 +234,14 @@ void perform_clustering() {
 
     int loop;
     for( loop=1; loop<nb_beams; loop++ ){
-        if(fabs(background[loop] - range[loop]) < cluster_threshold){
+        if(fabs(range[loop-1] - range[loop]) < cluster_threshold){
             cluster[loop] = nb_cluster;
             if(dynamic[loop] == 1){
                 ++nb_dynamic;
             }
         } else {
-            cluster_end[nb_cluster] = loop;
-            cluster_dynamic[nb_cluster] = ( nb_dynamic/fabs(cluster_start[nb_cluster] - cluster_end[nb_cluster])) * 100; 
+            cluster_end[nb_cluster] = loop - 1;
+            cluster_dynamic[nb_cluster] = ( nb_dynamic * 100) / fabs(cluster_start[nb_cluster] - cluster_end[nb_cluster]);
             cluster_size[nb_cluster] = distancePoints(current_scan[cluster_start[nb_cluster]], current_scan[cluster_end[nb_cluster]]);
             cluster_middle[nb_cluster] = midPoint(current_scan[cluster_start[nb_cluster]], current_scan[cluster_end[nb_cluster]]);
             
@@ -280,8 +280,8 @@ void perform_clustering() {
             nb_pts++;        
         }
     }
-    cluster_end[nb_cluster] = loop;
-    cluster_dynamic[nb_cluster] = ( nb_dynamic/fabs(cluster_start[nb_cluster] - cluster_end[nb_cluster])) * 100; 
+    cluster_end[nb_cluster] = loop - 1;
+    cluster_dynamic[nb_cluster] = ( nb_dynamic * 100) / fabs(cluster_start[nb_cluster] - cluster_end[nb_cluster]); 
     cluster_size[nb_cluster] = distancePoints(current_scan[cluster_start[nb_cluster]], current_scan[cluster_end[nb_cluster]]);
     cluster_middle[nb_cluster] = midPoint(current_scan[cluster_start[nb_cluster]], current_scan[cluster_end[nb_cluster]]);
 
@@ -369,23 +369,23 @@ void detect_moving_legs() {
         if((cluster_size[loop] > leg_size_min) && (cluster_size[loop] < leg_size_max) && (cluster_dynamic[loop] > dynamic_threshold)){
             moving_leg_detected[nb_moving_legs_detected] = cluster_middle[loop];
             ++nb_moving_legs_detected;
-        }
-        //textual display
-        ROS_INFO("moving leg detected[%i]: cluster[%i]", nb_moving_legs_detected, loop);
+            //textual display
+            ROS_INFO("moving leg detected[%i]: cluster[%i]", nb_moving_legs_detected, loop);
 
-        //graphical display
-        for(int loop2=cluster_start[loop]; loop2<=cluster_end[loop]; loop2++) {
-            // moving legs are white
-            display[nb_pts].x = current_scan[loop2].x;
-            display[nb_pts].y = current_scan[loop2].y;
-            display[nb_pts].z = current_scan[loop2].z;
+            //graphical display
+            for(int loop2=cluster_start[loop]; loop2<=cluster_end[loop]; loop2++) {
+                // moving legs are white
+                display[nb_pts].x = current_scan[loop2].x;
+                display[nb_pts].y = current_scan[loop2].y;
+                display[nb_pts].z = current_scan[loop2].z;
 
-            colors[nb_pts].r = 1;
-            colors[nb_pts].g = 1;
-            colors[nb_pts].b = 1;
-            colors[nb_pts].a = 1.0;
+                colors[nb_pts].r = 1;
+                colors[nb_pts].g = 1;
+                colors[nb_pts].b = 1;
+                colors[nb_pts].a = 1.0;
 
-            nb_pts++;
+                nb_pts++;
+            }
         }
     }
     /*for (int loop=0; loop<nb_cluster; loop++)//loop over all the clusters
@@ -445,13 +445,9 @@ void detect_moving_persons() {
                 nb_pts++;
 
                 //update of the goal and publish of the goal
-                goal_to_reach.x = moving_persons_detected[nb_moving_persons_detected].x;
-                goal_to_reach.y = moving_persons_detected[nb_moving_persons_detected].y;
-                break; // we care only about the 1st person detected
+                goal_to_reach.x = moving_persons_detected[0].x; // we care only about the 1st person detected
+                goal_to_reach.y = moving_persons_detected[0].y;
             }
-        }
-        if(loop_leg2 != nb_moving_legs_detected){
-            break; // 1st person detected
         }
     }
     /*for (int loop_leg1=0; loop_leg1<nb_moving_legs_detected; loop_leg1++)//loop over all the legs
